@@ -71,6 +71,9 @@ func _on_hook(name, fn, start, stop)
     if name == 'sys' then
         return u.hook_sys_add(start, nil, fn)
     end
+    if name == 'sym' then
+        return u.hook_sym(start, fn, nil)
+    end
     local type = _hook_types[name]
     if type != nil then
         if start == nil then

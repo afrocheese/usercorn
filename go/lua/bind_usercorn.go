@@ -53,6 +53,7 @@ func (b *ubind) Exports() map[string]lua.LGFunction {
 		"start": b.Start,
 		"stop":  b.Stop,
 
+		"hook_sym":     b.HookSym,
 		"hook_add":     b.HookAdd,
 		"hook_del":     b.HookDel,
 		"hook_sys_add": b.HookSysAdd,
@@ -322,6 +323,58 @@ func (b *ubind) HookSysDel(L *lua.LState) int {
 		b.u.HookSysDel(chh)
 	}
 	return 0
+}
+
+
+func (b *ubind) HookSym(_ *lua.LState) int {
+	L := b.L
+	u := b.u
+	loader := u.Loader()
+
+	var hhptr *lua.LUserData
+	var foundSymbol models.Symbol
+	name, fn := L.CheckString(1), L.CheckFunction(2)
+
+	syms, err := loader.Symbols()
+	if err != nil {
+		fmt.Printf("Unable to find symbol '%s'\n", name)
+		return 0
+	}
+	for _, sym := range syms {
+		if sym.Name == name {
+			foundSymbol = sym
+			break
+		}
+	}
+	if foundSymbol.Name != name || foundSymbol.Start == 0{
+		fmt.Printf("Unable to find symbol '%s'\n", name)
+		return 0
+	}
+	start := foundSymbol.Start + u.Base()
+	end := start
+	//fmt.Printf("Installing hook of '%s' at '0x%08x'", name, start)
+
+	luap := lua.P{Fn: fn, NRet: 0, Protect: true}
+	var cb interface{}
+	cb = func(_ cpu.Cpu, addr uint64, size uint32) {
+		laddr, lsize := lua.LInt(addr), lua.LInt(size)
+		L.EnvToLua()
+		L.SetGlobal("hh", hhptr)
+		L.SetGlobal("addr", laddr)
+		L.SetGlobal("size", lsize)
+		if err := L.CallByParam(luap, laddr, lsize); err != nil {
+			fmt.Println(err)
+		}
+		L.EnvFromLua()
+	}
+	hh, err := b.u.HookAdd(cpu.HOOK_CODE, cb, start, end)
+	b.checkErr(err)
+
+	hhptr = L.NewUserData()
+	hhptr.Value = hh
+	//hhptr.Metatable = "blah"
+	L.Push(hhptr)
+	return 1
 }
 
 // copy-pasted from models/cpu.Cpu

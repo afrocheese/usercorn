@@ -83,6 +83,7 @@ func NewElfLoader(r io.ReaderAt, arch string) (models.Loader, error) {
 	}
 	l.phdr = make([]byte, l.phentsize*l.phnum)
 	r.ReadAt(l.phdr, int64(l.phoff))
+	l.Symbols()
 	return l, nil
 }
 
